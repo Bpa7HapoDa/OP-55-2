@@ -1,55 +1,99 @@
 import flet as ft 
-from datetime import datetime
+from db import main_db
 
 def main(page: ft.Page):
-    # page.add(ft.Text("Hello world"))
-    page.title = 'Мое первое приложение на Flet'
+    page.title = 'ToDo App'
     page.theme_mode = ft.ThemeMode.LIGHT
 
-    greeting_text = ft.Text("Привет, мир!")
+    task_list = ft.Column(spacing=10)
 
-    greeting_history = []
-    history_text = ft.Text("История приветствий:")
+    def load_task():
+        task_list.controls.clear()
+        for task_id, task_text, create_time in main_db.get_tasks():
+            task_list.controls.append(create_task_row(task_id, task_text, create_time))
 
-    def on_button_click(_):
-        name = name_input.value.strip()
-        current_hour = datetime.datetime.now().hour
-
-        if name:
-            if 6 <= current_hour < 12:
-                greeting_text.value = f"Доброе утро, {name}!"
-            elif 12 <= current_hour < 18:
-                greeting_text.value = f"Добрый день, {name}!"
-            elif 18 <= current_hour < 24:
-                greeting_text.value = f"Добрый вечер, {name}!"
-            else:  
-                greeting_text.value = f"Доброй ночи, {name}!"
-            # greeting_text.value = f"Привет, {name}!"
-            greet_button.text = "Отправить еще раз"
-            name_input.value = ""
-            
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            greeting_history.append(f'{timestamp} - {name}')
-            history_text.value = "История приветствий:\n" + "\n".join(greeting_history)
-        else:
-            greeting_text.value = "Пожалуйте, введите имя!" 
-
-        # print(greeting_text.value)
         page.update()
     
-    def clear_history(_):
-        greeting_history.clear()
-        print(f"История приветствий очищена. {greeting_history}")
-        history_text.value = "История приветствий:"
+    def create_task_row(task_id, task_text, create_time):
+        task_field = ft.TextField(value=task_text, read_only=True, expand=True)
+
+        def enadle_edit(e):
+            task_field.read_only = False
+            task_field.update()
+
+        def save_task(e):
+            main_db.update_task(task_id, task_field.value)
+            task_field.read_only = True
+            page.update()
+        
+        return ft.Row([
+            task_field,
+            ft.Text(value=create_time, size=12, color=ft.Colors.GREY_500), # Отображаем дату
+            ft.IconButton(ft.Icons.EDIT, on_click=enadle_edit, tooltip='Редактировать', icon_color=ft.Colors.ORANGE),
+            ft.IconButton(ft.Icons.SAVE_ALT_ROUNDED, tooltip='Сохранить',
+                          on_click=save_task, 
+                          icon_color=ft.Colors.GREEN),
+            ft.IconButton(ft.Icons.DELETE, tooltip='Удалить', 
+                          on_click=lambda e: delete_task(task_id),
+                          icon_color=ft.Colors.RED)
+        ], alignment=ft.MainAxisAlignment.START)
+    
+    def add_task(e):
+        if not task_input.value:
+            return
+        
+        if add_button.disabled:
+            return
+        
+        if task_input.value:
+            task = task_input.value
+            task_id = main_db.add_task(task)
+            load_task() 
+            task_input.value = ""
+            page.update()
+    
+    def delete_task(task_id):
+        main_db.delete_task(task_id)
+        load_task()
+
+    def max_length(e):
+        if len(e.control.value) > 100:
+            e.control.error_text = "Длина задачи не может превышать 100 символов"
+            add_button.disabled = True
+        else:
+            e.control.error_text = None
+            add_button.disabled = False
         page.update()
 
-    clear_button = ft.IconButton(icon_color=ft.Colors.GREEN, icon=ft.Icons.DELETE_FOREVER, tooltip="Очистить историю", on_click=clear_history)
 
-    name_input = ft.TextField(label="Введите имя:", on_submit=on_button_click)
-    greet_button = ft.ElevatedButton("Отправить", on_click=on_button_click, icon=ft.Icons.SEND)
-    greet_button_1 = ft.TextButton("Отправить", on_click=on_button_click, icon=ft.Icons.SEND)
+    task_input = ft.TextField(label='Введите задачу', on_change=max_length)
+    add_button = ft.TextButton("Добавить", on_click=add_task)
 
-    page.add(greeting_text, name_input, greet_button, greet_button_1, clear_button, history_text)
+    content = ft.Column([
+        ft.Row([task_input, add_button], 
+               alignment=ft.MainAxisAlignment.SPACE_EVENLY),
+        task_list
+    ])
 
+    background_image = ft.Image(
+        src='/home/Admin1/OP-55-2/media/Image.png',
+        fit=ft.ImageFit.FILL,
+        width=page.width,
+        height=page.height
+    )
 
-ft.app(target=main, view=ft.WEB_BROWSER)
+    background = ft.Stack(controls=[background_image, content]) 
+
+    def on_resize(e):
+        background_image.width = page.width
+        background_image.height = page.height
+        page.update()
+
+    page.add(background)
+    page.on_resize = on_resize
+
+    load_task()
+
+if __name__ == "__main__":
+    main_db.init_db()
+    ft.app(target=main)
