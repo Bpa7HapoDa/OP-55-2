@@ -11,10 +11,13 @@ def init_db():
     conn.commit()
     conn.close()
 
-def get_tasks():
+def get_tasks(active_only=False):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute(queries.SELECT_TASKS)
+    if active_only:
+        cursor.execute(queries.SELECT_ACTIVE_TASKS)
+    else:
+        cursor.execute(queries.SELECT_TASKS)
     tasks = cursor.fetchall()
     conn.close()
     return tasks
@@ -36,9 +39,23 @@ def update_task(task_id, new_task):
     conn.commit()
     conn.close()
 
+def update_status(task_id, status):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(queries.UPDATE_STATUS, (status, task_id))
+    conn.commit()
+    conn.close()
+
 def delete_task(task_id):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(queries.DELETE_TASK, (task_id,))
+    conn.commit()
+    conn.close()
+    
+def delete_completed_tasks():
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(queries.DELETE_COMPLETED)
     conn.commit()
     conn.close()

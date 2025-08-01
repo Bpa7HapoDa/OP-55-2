@@ -1,21 +1,30 @@
 import flet as ft 
 from db import main_db
+from datetime import datetime
 
 def main(page: ft.Page):
     page.title = 'ToDo App'
     page.theme_mode = ft.ThemeMode.LIGHT
 
     task_list = ft.Column(spacing=10)
+    is_active_only = False
 
     def load_task():
         task_list.controls.clear()
-        for task_id, task_text, create_time in main_db.get_tasks():
-            task_list.controls.append(create_task_row(task_id, task_text, create_time))
-
+        nonlocal is_active_only
+        for task_id, task_text, create_time, status in main_db.get_tasks(active_only=is_active_only):
+            task_list.controls.append(create_task_row(task_id, task_text, create_time, status))
         page.update()
     
-    def create_task_row(task_id, task_text, create_time):
-        task_field = ft.TextField(value=task_text, read_only=True, expand=True)
+    def create_task_row(task_id, task_text, create_time, status):
+        
+        def toggle_status(e):
+            new_status = 'completed' if e.control.value else 'in_progress'
+            main_db.update_status(task_id, new_status)
+            load_task()
+
+        task_field = ft.TextField(value=task_text, read_only=True)
+        checkbox = ft.Checkbox(value=(status == 'completed'), on_change=toggle_status)
 
         def enadle_edit(e):
             task_field.read_only = False
@@ -27,8 +36,9 @@ def main(page: ft.Page):
             page.update()
         
         return ft.Row([
+            checkbox,
             task_field,
-            ft.Text(value=create_time, size=12, color=ft.Colors.GREY_500), # Отображаем дату
+            ft.Text(value=create_time, size=12, color=ft.Colors.GREY_500),
             ft.IconButton(ft.Icons.EDIT, on_click=enadle_edit, tooltip='Редактировать', icon_color=ft.Colors.ORANGE),
             ft.IconButton(ft.Icons.SAVE_ALT_ROUNDED, tooltip='Сохранить',
                           on_click=save_task, 
@@ -45,15 +55,24 @@ def main(page: ft.Page):
         if add_button.disabled:
             return
         
-        if task_input.value:
-            task = task_input.value
-            task_id = main_db.add_task(task)
-            load_task() 
-            task_input.value = ""
-            page.update()
+        task = task_input.value
+        main_db.add_task(task)
+        load_task() 
+        task_input.value = ""
+        task_input.error_text = None
+        page.update()
     
     def delete_task(task_id):
         main_db.delete_task(task_id)
+        load_task()
+
+    def clear_completed(e):
+        main_db.delete_completed_tasks()
+        load_task()
+
+    def filter_tasks(e):
+        nonlocal is_active_only
+        is_active_only = e.control.text == 'В работе'
         load_task()
 
     def max_length(e):
@@ -65,13 +84,19 @@ def main(page: ft.Page):
             add_button.disabled = False
         page.update()
 
-
     task_input = ft.TextField(label='Введите задачу', on_change=max_length)
     add_button = ft.TextButton("Добавить", on_click=add_task)
+    
+    filter_buttons = ft.Row([
+        ft.TextButton("Все", on_click=filter_tasks),
+        ft.TextButton("В работе", on_click=filter_tasks),
+        ft.TextButton("Очистить выполненные", on_click=clear_completed, style=ft.ButtonStyle(color=ft.Colors.RED))
+    ], alignment=ft.MainAxisAlignment.CENTER)
 
     content = ft.Column([
         ft.Row([task_input, add_button], 
                alignment=ft.MainAxisAlignment.SPACE_EVENLY),
+        filter_buttons,
         task_list
     ])
 
